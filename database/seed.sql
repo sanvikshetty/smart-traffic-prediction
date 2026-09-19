@@ -43,3 +43,15 @@ SELECT s.sensor_id,
        END
 FROM (VALUES ('S001',1),('S002',2),('S003',3),('S004',4),('S005',5)) s(sensor_id,idx)
 CROSS JOIN generate_series(0,95) x(n);
+
+-- Seed a few open alerts from the latest synthetic readings so the UI has a demonstrable alert workflow.
+INSERT INTO congestion_alerts(sensor_id,alert_level,message,threshold,status)
+SELECT tr.sensor_id,
+       CASE WHEN tr.vehicle_count >= 120 THEN 'SEVERE' ELSE 'HIGH' END,
+       'Synthetic demo alert: elevated traffic volume detected.',
+       CASE WHEN tr.vehicle_count >= 120 THEN 120 ELSE 90 END,
+       'open'
+FROM traffic_readings tr
+JOIN (SELECT sensor_id,MAX(recorded_at) AS recorded_at FROM traffic_readings GROUP BY sensor_id) latest
+  ON latest.sensor_id=tr.sensor_id AND latest.recorded_at=tr.recorded_at
+WHERE tr.vehicle_count >= 90;
