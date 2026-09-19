@@ -1,13 +1,13 @@
-fastapi==0.116.1
-uvicorn[standard]==0.35.0
-sqlalchemy==2.0.43
-psycopg[binary]==3.2.9
-geoalchemy2==0.18.0
-neo4j==5.28.1
-pydantic==2.11.7
-python-dotenv==1.1.1
-pandas==2.3.2
-numpy==2.3.3
-scikit-learn==1.7.2
-torch==2.8.0
-torch-geometric==2.6.1
+# Python 3.14-compatible backend dependencies
+fastapi>=0.116,<1
+uvicorn[standard]>=0.35,<1
+sqlalchemy>=2.0,<3
+psycopg[binary]>=3.2.10,<4
+geoalchemy2>=0.18,<1
+neo4j>=5.28,<6
+pydantic>=2.12,<3
+python-dotenv>=1.1,<2
+pandas>=2.3.3,<3
+numpy>=2.3,<3
+scikit-learn>=1.7,<2
+# PyTorch / PyTorch Geometric are installed separately because wheel availability depends on the local Python/Windows environment.
