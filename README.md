@@ -1,95 +1,73 @@
 # Smart Traffic Prediction using Graph Neural Networks
 
-A complete academic **Pre-Final Year Advanced Database** project. The database layer is the core: PostgreSQL + PostGIS + Neo4j manage relational, spatial and graph traffic information, while a PyTorch Geometric GCN provides traffic forecasting.
+Academic **Pre-Final Advanced Database** project combining PostgreSQL, graph data, a GNN model and a React dashboard.
 
-> The included traffic records are **synthetic demonstration data**. They are not presented as real-world traffic measurements.
+> The current traffic records shown in pgAdmin are synthetic demonstration data.
 
-## Architecture
+## Current project flow
 
 ```text
-React + Plotly
-      |
-    FastAPI
-      |
-  +---+-------------+
-  |         |       |
-PostgreSQL PostGIS Neo4j
-  |         |       |
-  +---------+-------+
-            |
-      Python ML layer
-            |
-       PyTorch GCN
-            |
-     15/30/60 min forecast
-            |
-        PostgreSQL
+PostgreSQL (smart_traffic_db)
+        |
+        +--> traffic_nodes
+        +--> road_edges
+        +--> traffic_data
+        +--> traffic_predictions
+        |
+        v
+FastAPI backend
+        |
+        v
+2-layer Graph Convolutional Network
+        |
+        v
+15-minute traffic prediction
+        |
+        v
+React + Plotly dashboard
 ```
 
-## Features
+## Database already prepared in pgAdmin
 
-- Relational schema with PK/FK/UNIQUE/CHECK/NOT NULL constraints
-- PostgreSQL views, joins, aggregations and query-plan example
-- Composite indexes and PostGIS GiST spatial indexes
-- PostGIS point/line geometry, distance and proximity queries
-- Neo4j road-network graph with Cypher traversal
-- Traffic analytics and congestion classification
-- React dashboard with Plotly charts and spatial map
-- FastAPI REST endpoints with validation and error handling
-- GCN traffic prediction with 15/30/60-minute horizons
-- Linear Regression baseline and MAE/RMSE/MAPE evaluation
-- Environment variables and Git-safe configuration
+The current local setup uses:
+- `traffic_nodes` — road/junction nodes and coordinates
+- `road_edges` — graph connectivity
+- `traffic_data` — vehicle count, speed and congestion observations
+- `traffic_predictions` — model output
 
-## Windows quick start
+Indexes created in pgAdmin are retained for faster node/time queries.
 
-### 1. Prerequisites
+## Windows + VS Code setup
 
-Install:
-- Docker Desktop
-- Python 3.11 or newer
-- Node.js 20 or newer
-- Git
-
-### 2. Clone and enter the repository
+### 1. Pull the latest project
 
 ```powershell
-git clone https://github.com/sanvikshetty/smart-traffic-prediction.git
-cd smart-traffic-prediction
+git pull origin main
 ```
 
-### 3. Create environment file
+### 2. Configure PostgreSQL
 
-```powershell
-Copy-Item .env.example .env
+Copy `.env.example` to `.env` and set your actual PostgreSQL password.
+
+Important defaults for the database you created manually:
+
+```text
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=smart_traffic_db
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=YOUR_PASSWORD
 ```
 
-The Docker defaults already match `.env.example`: PostgreSQL password `postgres`, Neo4j password `trafficpassword`.
-
-### 4. Start databases
-
-```powershell
-docker compose up -d
-```
-
-This creates PostgreSQL with PostGIS and loads the schema + clearly marked synthetic seed data. Neo4j starts separately.
-
-### 5. Initialize Neo4j
-
-Create Python environment:
+### 3. Create Python environment
 
 ```powershell
 py -m venv .venv
-.\\.venv\\Scripts\\Activate.ps1
-pip install -r backend\\requirements.txt
+.\.venv\Scripts\Activate.ps1
+pip install -r backend\requirements.txt
 ```
 
-Then:
-
-```powershell
-python scripts\\init_neo4j.py
-```
-
-### 6. Start FastAPI
+### 4. Start FastAPI
 
 From the repository root:
 
@@ -98,9 +76,10 @@ $env:PYTHONPATH="backend"
 uvicorn app.main:app --reload --app-dir backend
 ```
 
-API documentation is available at `http://localhost:8000/docs`.
+API: `http://localhost:8000`
+Swagger: `http://localhost:8000/docs`
 
-### 7. Start React
+### 5. Start the React dashboard
 
 Open a second terminal:
 
@@ -110,57 +89,70 @@ npm install
 npm run dev
 ```
 
-Open the URL shown by Vite, normally `http://localhost:5173`.
+Open the Vite URL, normally `http://localhost:5173`.
 
-## GNN training
+## GNN prediction
 
-The dashboard works immediately with a clearly labelled development fallback prediction. To train the actual GCN on the database data:
+The backend now detects the four-table pgAdmin schema automatically.
 
-```powershell
-python ml\\training\\train_gcn.py
+Run the model through the API:
+
+```text
+POST http://localhost:8000/api/predict/gnn?epochs=300
 ```
 
-This produces:
-- `ml/models/gcn.pt`
-- `ml/models/metrics.json`
+Or use Swagger at `/docs`.
 
-Then generate database predictions:
+The endpoint:
+1. Reads `traffic_nodes`.
+2. Reads `road_edges` and constructs a normalized adjacency matrix.
+3. Reads the latest `traffic_data` for every node.
+4. Builds node features: vehicle count, average speed and congestion level.
+5. Trains a two-layer GCN.
+6. Generates the next-state development forecast.
+7. Writes predictions to `traffic_predictions` when the table columns match.
+8. Returns the prediction JSON to the dashboard.
 
-```powershell
-python ml\\training\\generate_predictions.py
-```
+### Important model limitation
 
-Refresh the dashboard. The prediction cards will then show stored `GCN` predictions instead of the development fallback.
+The current pgAdmin data shown in the project has one timestamp per node. Therefore the model currently uses a documented short-horizon development target derived from the current state. For genuine supervised forecasting and MAE/RMSE evaluation, add multiple historical timestamps per node and train against the actual future observation.
 
-## API endpoints
+## Useful API endpoints
 
-- `GET /api/health`
-- `GET /api/dashboard`
-- `GET /api/traffic/current`
-- `GET /api/traffic/history`
-- `GET /api/traffic/{sensor_id}`
-- `GET /api/sensors`
-- `GET /api/junctions`
-- `GET /api/analytics`
-- `GET /api/congestion`
-- `GET /api/prediction/{sensor_id}`
-- `GET /api/graph/neighbors/{junction_id}`
-- `GET /api/graph/summary`
-- `POST /api/traffic/readings`
+- `GET /api/health` — PostgreSQL connectivity and schema detection
+- `GET /api/schema` — database table inventory
+- `GET /api/dashboard` — project KPIs
+- `GET /api/nodes` — traffic nodes
+- `GET /api/edges` — road graph edges
+- `GET /api/traffic/current` — latest traffic per node
+- `GET /api/traffic/history` — historical traffic / hourly aggregates
+- `GET /api/analytics` — node, hourly and congestion analytics
+- `POST /api/predict/gnn` — train and run the GNN
+- `GET /api/predictions` — stored predictions
+- `GET /api/prediction/{node_id}` — predictions for one node
+- `GET /api/congestion` — high/severe congestion observations
 
-## Advanced Database viva points
+## Advanced Database points for viva
 
-1. PostgreSQL is the relational source of record.
-2. PostGIS extends PostgreSQL for geographic data and spatial operators.
-3. Neo4j represents junction connectivity naturally as a graph.
-4. Composite index `(sensor_id, recorded_at)` supports sensor history queries.
-5. GiST indexes support spatial search.
-6. Views simplify repeated analytical queries.
-7. Foreign keys preserve referential integrity.
-8. CHECK constraints enforce domain rules at the database layer.
-9. SQL handles aggregation and joins; Cypher handles graph traversal.
-10. The GNN consumes traffic features plus road connectivity and stores predictions back into PostgreSQL.
+1. PostgreSQL is the system of record.
+2. `traffic_nodes` models entities in the road network.
+3. `road_edges` represents graph relationships between nodes.
+4. `traffic_data` stores time-dependent traffic features.
+5. `traffic_predictions` stores derived ML results separately from raw observations.
+6. Primary keys identify nodes and observations.
+7. Foreign keys maintain node-to-traffic and edge-to-node integrity.
+8. Indexes reduce lookup time for node and timestamp queries.
+9. SQL performs filtering, joins and aggregation before the ML layer consumes data.
+10. The GNN uses both node features and graph connectivity, unlike a plain tabular model.
+11. Predictions are persisted back into PostgreSQL so the dashboard can query them.
+12. The architecture keeps database, API, ML and presentation layers separate.
 
-## Dataset note
+## Next data upgrade
 
-The repository is intentionally self-contained for college demonstration. The seeded dataset is synthetic and generated only for development. To use METR-LA or another public traffic forecasting dataset later, map its sensor/time-series fields into `traffic_readings` and construct its road graph in Neo4j. No real-world performance claim should be made until the real dataset is trained and evaluated.
+For the final project, add 20–100+ timestamps per node. Then we can implement:
+- train/validation/test split by time
+- true next-step forecasting
+- MAE, RMSE and MAPE
+- baseline vs GNN comparison
+- 15/30/60 minute horizons
+- live dashboard refresh
