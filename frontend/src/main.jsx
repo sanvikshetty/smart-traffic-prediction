@@ -4,58 +4,27 @@ import Plot from 'react-plotly.js';
 import {api} from './api';
 import './styles.css';
 
-const fmt = (v) => Number(v ?? 0).toLocaleString(undefined,{maximumFractionDigits:2});
+const fmt=(v)=>Number(v??0).toLocaleString(undefined,{maximumFractionDigits:2});
+const plotLayout={paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{color:'#d8e0ee'},showlegend:false};
 
 function App(){
-  const [page,setPage]=useState('Dashboard');
-  const [dashboard,setDashboard]=useState(null);
-  const [current,setCurrent]=useState([]);
-  const [analytics,setAnalytics]=useState({junctions:[],hourly:[],congestion:[]});
-  const [sensors,setSensors]=useState([]);
-  const [junctions,setJunctions]=useState([]);
-  const [alerts,setAlerts]=useState([]);
-  const [selected,setSelected]=useState('S001');
-  const [prediction,setPrediction]=useState(null);
-  const [graph,setGraph]=useState(null);
-  const [neighbors,setNeighbors]=useState([]);
-  const [error,setError]=useState('');
-
-  useEffect(()=>{
-    Promise.all([api.dashboard(),api.current(),api.analytics(),api.sensors(),api.junctions(),api.alerts(),api.graphSummary()])
-      .then(([d,c,a,s,j,al,g])=>{setDashboard(d);setCurrent(c);setAnalytics(a);setSensors(s);setJunctions(j);setAlerts(al);setGraph(g);})
-      .catch(e=>setError(e.message));
-  },[]);
-  useEffect(()=>{api.prediction(selected).then(setPrediction).catch(e=>setPrediction({error:e.message}));},[selected]);
-
-  const nav=['Dashboard','Traffic Monitoring','Traffic Analytics','Predictions','Road Network','Alerts','Database Insights'];
-  const historyData=useMemo(()=>({x:analytics.hourly.map(x=>x.hour),y:analytics.hourly.map(x=>x.avg_volume)}),[analytics]);
-  const cards=dashboard ? [
-    ['Sensors',dashboard.sensors,'sensors'],['Junctions',dashboard.junctions,'junctions'],['Avg Traffic',fmt(dashboard.avg_traffic),'vehicles'],['Avg Speed',`${fmt(dashboard.avg_speed)} km/h`,'speed'],['Congested',dashboard.congested,'locations']
-  ]:[];
-
-  return <div className="app">
-    <aside><div className="brand"><span>ST</span><div><b>Smart Traffic</b><small>GNN + Advanced DB</small></div></div>
-      <nav>{nav.map(n=><button className={page===n?'active':''} onClick={()=>setPage(n)} key={n}>{n}</button>)}</nav>
-      <div className="side-note"><b>Database Core</b><p>PostgreSQL · PostGIS · Neo4j</p></div>
-    </aside>
-    <main><header><div><small>ADVANCED DATABASE PROJECT</small><h1>{page}</h1></div><div className="status"><i/> API connected</div></header>
-      {error && <div className="error">Backend connection error: {error}. Start FastAPI and the databases.</div>}
-      {page==='Dashboard' && <>
-        <section className="hero"><div><span className="pill">LIVE DEMO</span><h2>Traffic intelligence across the road network.</h2><p>Relational, spatial and graph databases integrated with a GCN prediction pipeline.</p></div><div className="hero-metric"><b>{dashboard?fmt(dashboard.avg_traffic):'—'}</b><span>avg vehicles / reading</span></div></section>
-        <div className="cards">{cards.map(([a,b,c])=><div className="card" key={a}><span>{a}</span><strong>{b}</strong><small>{c}</small></div>)}</div>
-        <section className="grid two"><Panel title="Hourly traffic"><Plot data={[{x:historyData.x,y:historyData.y,type:'scatter',mode:'lines+markers'}]} layout={{...plotLayout,title:'',xaxis:{title:'Hour'},yaxis:{title:'Vehicles'},margin:{l:55,r:20,t:10,b:45}}} useResizeHandler style={{width:'100%',height:300}} /></Panel><Panel title="Current congestion"><Table rows={current.slice(0,6)} cols={['junction_name','vehicle_count','average_speed','congestion_level']} /></Panel></section>
-      </>}
-      {page==='Traffic Monitoring' && <section><Panel title="Current sensor readings"><Table rows={current} cols={['sensor_code','junction_name','vehicle_count','average_speed','occupancy','congestion_level']} /></Panel></section>}
-      {page==='Traffic Analytics' && <section className="grid two"><Panel title="Average traffic by hour"><Plot data={[{x:analytics.hourly.map(x=>x.hour),y:analytics.hourly.map(x=>x.avg_volume),type:'bar'}]} layout={{...plotLayout,xaxis:{title:'Hour'},yaxis:{title:'Average volume'}}} useResizeHandler style={{width:'100%',height:360}} /></Panel><Panel title="Junction analytics"><Table rows={analytics.junctions} cols={['junction_id','name','avg_volume','max_volume','avg_speed','readings']} /></Panel></section>}
-      {page==='Predictions' && <section><Panel title="GNN prediction horizons"><div className="selector"><label>Sensor</label><select value={selected} onChange={e=>setSelected(e.target.value)}>{sensors.map(s=><option key={s.sensor_id} value={s.sensor_id}>{s.sensor_code} — {s.junction_name}</option>)}</select></div>{prediction?.error?<div className="error">{prediction.error}</div>:<div className="prediction-grid">{prediction?.predictions?.map(p=><div className="prediction" key={p.horizon_minutes}><span>+{p.horizon_minutes} min</span><b>{fmt(p.predicted_volume)}</b><small>vehicles · {p.predicted_congestion}</small><em>{p.model_name}</em></div>)}</div>}</Panel></section>}
-      {page==='Road Network' && <section className="grid two"><Panel title="Junctions"><Table rows={junctions} cols={['junction_id','name','latitude','longitude']} /></Panel><Panel title="Neo4j traversal"><div className="selector"><label>Junction</label><select onChange={e=>api.neighbors(e.target.value).then(r=>setNeighbors(r.neighbors))}>{junctions.map(j=><option key={j.junction_id} value={j.junction_id}>{j.name}</option>)}</select></div><div className="neighbors">{neighbors.length?neighbors.map(n=><span key={n.junction_id}>{n.junction_id} · {n.name}</span>):<p>Select a junction to query connected neighbors.</p>}</div><div className="graph-stats"><b>{graph?.junctions ?? '—'}</b><span>junction nodes</span><b>{graph?.connections ?? '—'}</b><span>graph relationships</span></div></Panel></section>}
-      {page==='Alerts' && <section><Panel title="Open congestion alerts">{alerts.length?<Table rows={alerts} cols={['junction_name','alert_level','message','status']} />:<div className="empty">No open alerts currently.</div>}</Panel></section>}
-      {page==='Database Insights' && <section className="grid two"><Panel title="Database architecture"><div className="architecture"><div><b>PostgreSQL</b><span>Relational source of record</span></div><div><b>PostGIS</b><span>Spatial extension + GiST indexes</span></div><div><b>Neo4j</b><span>Road graph + traversal</span></div><div><b>GNN</b><span>Prediction over graph features</span></div></div></Panel><Panel title="Academic concepts"><ul className="concepts"><li>Primary & foreign keys</li><li>CHECK / UNIQUE / NOT NULL constraints</li><li>Composite and spatial indexes</li><li>Joins and aggregation</li><li>Views and query plans</li><li>PostGIS distance / proximity</li><li>Neo4j Cypher traversal</li><li>GCN vs Linear Regression evaluation</li></ul></Panel></section>}
-    </main>
-  </div>
+ const [page,setPage]=useState('Dashboard'),[dashboard,setDashboard]=useState(null),[current,setCurrent]=useState([]),[analytics,setAnalytics]=useState({junctions:[],hourly:[],congestion:[]}),[sensors,setSensors]=useState([]),[junctions,setJunctions]=useState([]),[alerts,setAlerts]=useState([]),[selected,setSelected]=useState('S001'),[prediction,setPrediction]=useState(null),[graph,setGraph]=useState(null),[neighbors,setNeighbors]=useState([]),[error,setError]=useState('');
+ useEffect(()=>{Promise.all([api.dashboard(),api.current(),api.analytics(),api.sensors(),api.junctions(),api.alerts(),api.graphSummary()]).then(([d,c,a,s,j,al,g])=>{setDashboard(d);setCurrent(c);setAnalytics(a);setSensors(s);setJunctions(j);setAlerts(al);setGraph(g)}).catch(e=>setError(e.message))},[]);
+ useEffect(()=>{api.prediction(selected).then(setPrediction).catch(e=>setPrediction({error:e.message}))},[selected]);
+ const nav=['Dashboard','Traffic Map','Traffic Monitoring','Traffic Analytics','Predictions','Road Network','Alerts','Database Insights'];
+ const cards=dashboard?[['Sensors',dashboard.sensors,'sensors'],['Junctions',dashboard.junctions,'junctions'],['Avg Traffic',fmt(dashboard.avg_traffic),'vehicles'],['Avg Speed',`${fmt(dashboard.avg_speed)} km/h`,'speed'],['Congested',dashboard.congested,'locations']]:[];
+ return <div className="app"><aside><div className="brand"><span>ST</span><div><b>Smart Traffic</b><small>GNN + Advanced DB</small></div></div><nav>{nav.map(n=><button className={page===n?'active':''} onClick={()=>setPage(n)} key={n}>{n}</button>)}</nav><div className="side-note"><b>Database Core</b><p>PostgreSQL · PostGIS · Neo4j</p></div></aside>
+ <main><header><div><small>ADVANCED DATABASE PROJECT</small><h1>{page}</h1></div><div className="status"><i/> API connected</div></header>{error&&<div className="error">Backend connection error: {error}. Start FastAPI and the databases.</div>}
+ {page==='Dashboard'&&<><section className="hero"><div><span className="pill">LIVE DEMO</span><h2>Traffic intelligence across the road network.</h2><p>Relational, spatial and graph databases integrated with a GCN prediction pipeline.</p></div><div className="hero-metric"><b>{dashboard?fmt(dashboard.avg_traffic):'—'}</b><span>avg vehicles / reading</span></div></section><div className="cards">{cards.map(([a,b,c])=><div className="card" key={a}><span>{a}</span><strong>{b}</strong><small>{c}</small></div>)}</div><section className="grid two"><Panel title="Hourly traffic"><Plot data={[{x:analytics.hourly.map(x=>x.hour),y:analytics.hourly.map(x=>x.avg_volume),type:'scatter',mode:'lines+markers'}]} layout={{...plotLayout,xaxis:{title:'Hour'},yaxis:{title:'Vehicles'},margin:{l:55,r:20,t:10,b:45}}} useResizeHandler style={{width:'100%',height:300}}/></Panel><Panel title="Current congestion"><Table rows={current.slice(0,6)} cols={['junction_name','vehicle_count','average_speed','congestion_level']}/></Panel></section></>}
+ {page==='Traffic Map'&&<section><Panel title="Spatial traffic map — PostGIS coordinates"><Plot data={[{type:'scattergeo',lat:current.map(x=>x.latitude),lon:current.map(x=>x.longitude),text:current.map(x=>`${x.junction_name}<br>${x.vehicle_count} vehicles<br>${x.congestion_level}`),mode:'markers+text',textposition:'top center',marker:{size:14,color:current.map(x=>x.congestion_level==='SEVERE'?4:x.congestion_level==='HIGH'?3:x.congestion_level==='MEDIUM'?2:1),colorscale:'Turbo',showscale:true,colorbar:{title:'Congestion'}}}]} layout={{...plotLayout,geo:{scope:'asia',showland:true,landcolor:'#132238',showocean:true,oceancolor:'#091522',center:{lat:19.005,lon:73.108},projection:{scale:45}},margin:{l:0,r:0,t:10,b:0},height:600}} useResizeHandler style={{width:'100%'}}/></Panel></section>}
+ {page==='Traffic Monitoring'&&<section><Panel title="Current sensor readings"><Table rows={current} cols={['sensor_code','junction_name','vehicle_count','average_speed','occupancy','congestion_level']}/></Panel></section>}
+ {page==='Traffic Analytics'&&<section className="grid two"><Panel title="Average traffic by hour"><Plot data={[{x:analytics.hourly.map(x=>x.hour),y:analytics.hourly.map(x=>x.avg_volume),type:'bar'}]} layout={{...plotLayout,xaxis:{title:'Hour'},yaxis:{title:'Average volume'}}} useResizeHandler style={{width:'100%',height:360}}/></Panel><Panel title="Junction analytics"><Table rows={analytics.junctions} cols={['junction_id','name','avg_volume','max_volume','avg_speed','readings']}/></Panel></section>}
+ {page==='Predictions'&&<section><Panel title="GNN prediction horizons"><div className="selector"><label>Sensor</label><select value={selected} onChange={e=>setSelected(e.target.value)}>{sensors.map(s=><option key={s.sensor_id} value={s.sensor_id}>{s.sensor_code} — {s.junction_name}</option>)}</select></div>{prediction?.error?<div className="error">{prediction.error}</div>:<div className="prediction-grid">{prediction?.predictions?.map(p=><div className="prediction" key={p.horizon_minutes}><span>+{p.horizon_minutes} min</span><b>{fmt(p.predicted_volume)}</b><small>vehicles · {p.predicted_congestion}</small><em>{p.model_name}</em></div>)}</div>}</Panel></section>}
+ {page==='Road Network'&&<section className="grid two"><Panel title="Junctions"><Table rows={junctions} cols={['junction_id','name','latitude','longitude']}/></Panel><Panel title="Neo4j traversal"><div className="selector"><label>Junction</label><select onChange={e=>api.neighbors(e.target.value).then(r=>setNeighbors(r.neighbors))}>{junctions.map(j=><option key={j.junction_id} value={j.junction_id}>{j.name}</option>)}</select></div><div className="neighbors">{neighbors.length?neighbors.map(n=><span key={n.junction_id}>{n.junction_id} · {n.name}</span>):<p>Select a junction to query connected neighbors.</p>}</div><div className="graph-stats"><b>{graph?.junctions??'—'}</b><span>junction nodes</span><b>{graph?.connections??'—'}</b><span>graph relationships</span></div></Panel></section>}
+ {page==='Alerts'&&<section><Panel title="Open congestion alerts">{alerts.length?<Table rows={alerts} cols={['junction_name','alert_level','message','status']}/>:<div className="empty">No open alerts currently.</div>}</Panel></section>}
+ {page==='Database Insights'&&<section className="grid two"><Panel title="Database architecture"><div className="architecture"><div><b>PostgreSQL</b><span>Relational source of record</span></div><div><b>PostGIS</b><span>Spatial extension + GiST indexes</span></div><div><b>Neo4j</b><span>Road graph + traversal</span></div><div><b>GNN</b><span>Prediction over graph features</span></div></div></Panel><Panel title="Academic concepts"><ul className="concepts"><li>Primary & foreign keys</li><li>CHECK / UNIQUE / NOT NULL constraints</li><li>Composite and spatial indexes</li><li>Joins and aggregation</li><li>Views and query plans</li><li>PostGIS distance / proximity</li><li>Neo4j Cypher traversal</li><li>GCN vs Linear Regression evaluation</li></ul></Panel></section>}
+ </main></div>
 }
-
 function Panel({title,children}){return <div className="panel"><div className="panel-title"><h3>{title}</h3></div>{children}</div>}
 function Table({rows,cols}){if(!rows?.length)return <div className="empty">No data available.</div>;return <div className="table-wrap"><table><thead><tr>{cols.map(c=><th key={c}>{c.replaceAll('_',' ')}</th>)}</tr></thead><tbody>{rows.map((r,i)=><tr key={i}>{cols.map(c=><td key={c}>{typeof r[c]==='number'?fmt(r[c]):String(r[c]??'—')}</td>)}</tr>)}</tbody></table></div>}
-const plotLayout={paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{color:'#d8e0ee'},showlegend:false};
 createRoot(document.getElementById('root')).render(<App/>);
